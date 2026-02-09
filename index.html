@@ -1,69 +1,44 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>M-Link-Laboratory</title>
-    <style>
-        :root { --neon: #ff2d55; --dark: #050505; }
-        body { background: var(--dark); color: white; font-family: 'Courier New', monospace; margin: 0; overflow-x: hidden; text-align: center; }
-        .lab-title { padding: 40px; color: var(--neon); text-transform: uppercase; letter-spacing: 5px; text-shadow: 0 0 15px var(--neon); }
-        
-        /* Карусель */
-        .viewport { width: 100%; overflow: hidden; padding: 50px 0; min-height: 400px; }
-        .track { display: flex; gap: 20px; width: max-content; animation: scroll 60s linear infinite; }
-        .card { width: 250px; background: #111; border: 1px solid #333; padding: 10px; transition: 0.3s; }
-        .card:hover { border-color: var(--neon); transform: translateY(-10px); }
-        .card img { width: 100%; height: 300px; object-fit: cover; }
-        
-        @keyframes scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-
-        /* Кнопка добавления */
-        .add-btn { background: none; border: 1px solid var(--neon); color: var(--neon); padding: 15px 30px; cursor: pointer; margin-bottom: 50px; }
-        .add-btn:hover { background: var(--neon); color: white; box-shadow: 0 0 20px var(--neon); }
-
-        #upload-form { display: none; background: #111; padding: 20px; border: 1px solid var(--neon); width: 300px; margin: 0 auto 50px; }
-        input { width: 90%; margin-bottom: 10px; background: #000; color: #fff; border: 1px solid #444; padding: 5px; }
-    </style>
-</head>
-<body>
-
-<h1 class="lab-title">M-Link-Laboratory</h1>
-
-<div class="viewport">
-    <div class="track" id="track">
-        </div>
-</div>
-
-<button class="add-btn" id="show-form-btn" onclick="toggleForm()">+ ADD NEW DATA TO REPO</button>
-
-<div id="upload-form">
-    <input type="file" id="fileInput" accept="image/*">
-    <input type="text" id="captionInput" placeholder="ОПИСАНИЕ МОМЕНТА">
-    <button onclick="uploadToGithub()" id="saveBtn">COMMIT TO GITHUB</button>
-</div>
-
-<script>
-    const CONFIG = {
-        token: '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', // Вставь сюда свой токен
+const CONFIG = {
+        token: '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',
         repo: 'AntonMoryakov/M-Link-Laboratory',
         branch: 'main'
     };
 
     async function loadMemories() {
         try {
+            // Добавляем timestamp к запросу JSON, чтобы всегда получать свежий список
             const res = await fetch(`https://raw.githubusercontent.com/${CONFIG.repo}/${CONFIG.branch}/memories.json?t=${Date.now()}`);
             const data = await res.json();
             const track = document.getElementById('track');
             track.innerHTML = '';
             
-            [...data, ...data].forEach(item => {
+            // Если данных мало, дублируем их для бесконечного скролла
+            const displayData = data.length > 0 && data.length < 5 ? [...data, ...data, ...data] : data;
+
+            displayData.forEach(item => {
                 const card = document.createElement('div');
                 card.className = 'card';
-                card.innerHTML = `<img src="${item.url}"><div style="margin-top:10px; font-size:12px">${item.caption}</div>`;
+                
+                // Используем jsDelivr CDN для стабильного отображения и обхода кэша
+                // Превращаем raw.githubusercontent в fast CDN
+                const proxyUrl = item.url
+                    .replace('raw.githubusercontent.com', 'cdn.jsdelivr.net/gh')
+                    .replace('/main/', '@main/');
+                
+                // Добавляем уникальный хвост к картинке, чтобы она обновилась мгновенно
+                const finalUrl = `${proxyUrl}?t=${Date.now()}`;
+
+                card.innerHTML = `
+                    <img src="${finalUrl}" onerror="this.src='https://via.placeholder.com/250x300?text=LOADING...'">
+                    <div style="margin-top:10px; font-size:12px">
+                        [${item.date}]<br>${item.caption || 'Laboratory Moment'}
+                    </div>
+                `;
                 track.appendChild(card);
             });
-        } catch (e) { console.log("Пока воспоминаний нет..."); }
+        } catch (e) { 
+            console.log("Ошибка загрузки или база пока пуста:", e); 
+        }
     }
 
     async function uploadToGithub() {
@@ -72,49 +47,59 @@
         const btn = document.getElementById('saveBtn');
         
         if (!fileInput.files[0]) return alert("Выбери фото!");
+        
         btn.disabled = true;
-        btn.innerText = "UPLOADING...";
+        btn.innerText = "UPLOADING TO CLOUD...";
 
         const file = fileInput.files[0];
-        const fileName = `img/${Date.now()}_${file.name}`;
+        // Убираем лишние символы из имени файла
+        const cleanFileName = file.name.replace(/[^a-z0-9.]/gi, '_').toLowerCase();
+        const fileName = `img/${Date.now()}_${cleanFileName}`;
         const reader = new FileReader();
 
         reader.onload = async () => {
             const content = reader.result.split(',')[1];
 
-            // 1. Загружаем само фото
-            await fetch(`https://api.github.com/repos/${CONFIG.repo}/contents/${fileName}`, {
-                method: 'PUT',
-                headers: { 'Authorization': `token ${CONFIG.token}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: `Add photo: ${fileName}`, content, branch: CONFIG.branch })
-            });
+            try {
+                // 1. Загружаем само фото
+                await fetch(`https://api.github.com/repos/${CONFIG.repo}/contents/${fileName}`, {
+                    method: 'PUT',
+                    headers: { 'Authorization': `token ${CONFIG.token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: `Add photo: ${fileName}`, content, branch: CONFIG.branch })
+                });
 
-            // 2. Обновляем memories.json
-            const jsonRes = await fetch(`https://api.github.com/repos/${CONFIG.repo}/contents/memories.json`, {
-                headers: { 'Authorization': `token ${CONFIG.token}` }
-            });
-            const jsonData = await jsonRes.json();
-            const memories = JSON.parse(atob(jsonData.content));
-            
-            memories.push({
-                url: `https://raw.githubusercontent.com/${CONFIG.repo}/${CONFIG.branch}/${fileName}`,
-                caption: caption,
-                date: new Date().toLocaleDateString()
-            });
+                // 2. Получаем актуальный memories.json
+                const jsonRes = await fetch(`https://api.github.com/repos/${CONFIG.repo}/contents/memories.json?t=${Date.now()}`, {
+                    headers: { 'Authorization': `token ${CONFIG.token}` }
+                });
+                const jsonData = await jsonRes.json();
+                const memories = JSON.parse(atob(jsonData.content));
+                
+                memories.push({
+                    url: `https://raw.githubusercontent.com/${CONFIG.repo}/${CONFIG.branch}/${fileName}`,
+                    caption: caption,
+                    date: new Date().toLocaleDateString('ru-RU')
+                });
 
-            await fetch(`https://api.github.com/repos/${CONFIG.repo}/contents/memories.json`, {
-                method: 'PUT',
-                headers: { 'Authorization': `token ${CONFIG.token}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    message: "Update memories.json",
-                    content: btoa(JSON.stringify(memories, null, 2)),
-                    sha: jsonData.sha,
-                    branch: CONFIG.branch
-                })
-            });
+                // 3. Отправляем обновленный JSON обратно
+                await fetch(`https://api.github.com/repos/${CONFIG.repo}/contents/memories.json`, {
+                    method: 'PUT',
+                    headers: { 'Authorization': `token ${CONFIG.token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        message: "Database entry updated",
+                        content: btoa(JSON.stringify(memories, null, 2)),
+                        sha: jsonData.sha,
+                        branch: CONFIG.branch
+                    })
+                });
 
-            alert("Данные закоммичены! Сайт обновится через минуту.");
-            location.reload();
+                alert("Успех! Лаборатория обновится в течение минуты.");
+                location.reload();
+            } catch (err) {
+                alert("Ошибка при сохранении: " + err);
+                btn.disabled = false;
+                btn.innerText = "RETRY COMMIT";
+            }
         };
         reader.readAsDataURL(file);
     }
@@ -125,7 +110,3 @@
     }
 
     loadMemories();
-</script>
-
-</body>
-</html>
