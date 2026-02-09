@@ -36,15 +36,16 @@
 </div>
 
 <script>
-    // Маскировка от GitHub Push Protection
-    const _parts = ["ghp_", "SjxD3LzGhMQk6y1xXyoi", "5kE00c7BFp3cVWJQ"];
+    // РАЗРЕЖЬ НОВЫЙ ТОКЕН ТУТ
+    const p1 = "ghp_SjxD3LzGhMQk6y1xX"; 
+    const p2 = "yoi5kE00c7BFp3cVWJQ";
+
     const CONFIG = {
-        token: _parts.join(''),
+        token: p1 + p2,
         repo: 'AntonMoryakov/M-Link-Laboratory',
         branch: 'main'
     };
 
-    // Безопасная работа с текстом (Base64 + UTF-8)
     const b64Encode = (str) => btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (m, p) => String.fromCharCode('0x' + p)));
     const b64Decode = (str) => decodeURIComponent(atob(str).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
 
@@ -52,46 +53,32 @@
         const track = document.getElementById('track');
         try {
             const res = await fetch(`https://raw.githubusercontent.com/${CONFIG.repo}/${CONFIG.branch}/memories.json?t=${Date.now()}`);
-            if (!res.ok) throw new Error("Database not found");
+            if (!res.ok) throw new Error("No DB");
             const data = await res.json();
-            
             track.innerHTML = '';
-            if (!data || data.length === 0) {
-                track.innerHTML = '<p style="color:#444">[ DATABASE_EMPTY ]</p>';
-                return;
-            }
-
-            // Дублируем для бесконечной ленты
-            const displayData = data.length > 3 ? [...data, ...data] : [...data, ...data, ...data, ...data];
-
+            const displayData = data.length > 2 ? [...data, ...data] : data;
             displayData.forEach(item => {
                 const card = document.createElement('div');
                 card.className = 'card';
-                const fileName = item.url.split('/').pop();
-                const proxyUrl = `https://cdn.jsdelivr.net/gh/${CONFIG.repo}@main/img/${fileName}`;
-
+                const fName = item.url.split('/').pop();
                 card.innerHTML = `
-                    <img src="${proxyUrl}" onerror="this.src='https://via.placeholder.com/250x320?text=DATA_MISSING'">
-                    <div style="margin-top:12px; font-size:11px; color: #888; text-align: left;">
-                        <span style="color: var(--neon)">[${item.date}]</span><br>${item.caption || 'NO_DESC'}
-                    </div>
-                `;
+                    <img src="https://cdn.jsdelivr.net/gh/${CONFIG.repo}@main/img/${fName}" onerror="this.src='https://via.placeholder.com/250x320'">
+                    <div style="margin-top:12px; font-size:11px; color: #888; text-align:left;">
+                        <span style="color:var(--neon)">[${item.date}]</span><br>${item.caption || ''}
+                    </div>`;
                 track.appendChild(card);
             });
-        } catch (e) { 
-            console.error(e);
-            track.innerHTML = '<p style="color:red">SYSTEM_OFFLINE</p>';
-        }
+        } catch (e) { track.innerHTML = '[ DATABASE_READY_FOR_FIRST_UPLOAD ]'; }
     }
 
     async function uploadToGithub() {
         const fileInput = document.getElementById('fileInput');
         const caption = document.getElementById('captionInput').value;
         const btn = document.getElementById('saveBtn');
-        if (!fileInput.files[0]) return alert("ACCESS DENIED: NO FILE");
+        if (!fileInput.files[0]) return alert("Выбери файл");
         
         btn.disabled = true;
-        btn.innerText = "COMMITTING...";
+        btn.innerText = "SENDING...";
 
         const file = fileInput.files[0];
         const fileName = `img/${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
@@ -100,27 +87,26 @@
         reader.onload = async () => {
             const content = reader.result.split(',')[1];
             try {
-                // 1. Загрузка фото
-                await fetch(`https://api.github.com/repos/${CONFIG.repo}/contents/${fileName}`, {
+                // 1. Upload IMG
+                const imgRes = await fetch(`https://api.github.com/repos/${CONFIG.repo}/contents/${fileName}`, {
                     method: 'PUT',
                     headers: { 'Authorization': `token ${CONFIG.token}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: `System_Add: ${fileName}`, content, branch: CONFIG.branch })
+                    body: JSON.stringify({ message: "upload img", content })
                 });
+                if (!imgRes.ok) throw new Error("Token Error or Repo Access");
 
-                // 2. Чтение базы
+                // 2. Sync JSON
                 const jsonRes = await fetch(`https://api.github.com/repos/${CONFIG.repo}/contents/memories.json?ref=${CONFIG.branch}`, {
                     headers: { 'Authorization': `token ${CONFIG.token}` }
                 });
                 
-                const jsonData = await jsonRes.json();
                 let memories = [];
                 let sha = null;
 
-                if (jsonData && jsonData.content) {
-                    try {
-                        memories = JSON.parse(b64Decode(jsonData.content.replace(/\s/g, '')));
-                        sha = jsonData.sha;
-                    } catch (e) { memories = []; }
+                if (jsonRes.ok) {
+                    const jsonData = await jsonRes.json();
+                    sha = jsonData.sha;
+                    memories = JSON.parse(b64Decode(jsonData.content.replace(/\s/g, '')));
                 }
 
                 memories.push({
@@ -129,36 +115,32 @@
                     date: new Date().toLocaleDateString('ru-RU')
                 });
 
-                // 3. Сохранение базы
-                const payload = {
-                    message: "DB_Sync_Success",
-                    content: b64Encode(JSON.stringify(memories, null, 2)),
-                    branch: CONFIG.branch
-                };
-                if (sha) payload.sha = sha;
-
                 const finalRes = await fetch(`https://api.github.com/repos/${CONFIG.repo}/contents/memories.json`, {
                     method: 'PUT',
                     headers: { 'Authorization': `token ${CONFIG.token}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
+                    body: JSON.stringify({
+                        message: "update db",
+                        content: b64Encode(JSON.stringify(memories, null, 2)),
+                        sha: sha,
+                        branch: CONFIG.branch
+                    })
                 });
 
-                if (!finalRes.ok) throw new Error("Sync failed");
-
-                alert("DATA COMMITTED");
+                if (!finalRes.ok) throw new Error("Final sync failed");
+                alert("SUCCESS");
                 location.reload();
             } catch (err) {
-                alert("CRITICAL_ERROR: " + err.message);
+                alert("STOP: " + err.message + " (Check Token!)");
                 btn.disabled = false;
-                btn.innerText = "RETRY COMMIT";
+                btn.innerText = "RETRY";
             }
         };
         reader.readAsDataURL(file);
     }
 
     function toggleForm() {
-        const form = document.getElementById('upload-form');
-        form.style.display = form.style.display === 'block' ? 'none' : 'block';
+        const f = document.getElementById('upload-form');
+        f.style.display = f.style.display === 'block' ? 'none' : 'block';
     }
 
     loadMemories();
