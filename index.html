@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>M-Link-Laboratory</title>
+    <style>
+        :root { --neon: #ff2d55; --dark: #050505; }
+        body { background: var(--dark); color: white; font-family: 'Courier New', monospace; margin: 0; overflow-x: hidden; text-align: center; }
+        .lab-title { padding: 40px; color: var(--neon); text-transform: uppercase; letter-spacing: 5px; text-shadow: 0 0 15px var(--neon); }
+        
+        /* Карусель */
+        .viewport { width: 100%; overflow: hidden; padding: 50px 0; min-height: 400px; }
+        .track { display: flex; gap: 20px; width: max-content; animation: scroll 60s linear infinite; }
+        .card { width: 250px; background: #111; border: 1px solid #333; padding: 10px; transition: 0.3s; }
+        .card:hover { border-color: var(--neon); transform: translateY(-10px); }
+        .card img { width: 100%; height: 300px; object-fit: cover; }
+        
+        @keyframes scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+        /* Кнопка добавления */
+        .add-btn { background: none; border: 1px solid var(--neon); color: var(--neon); padding: 15px 30px; cursor: pointer; margin-bottom: 50px; }
+        .add-btn:hover { background: var(--neon); color: white; box-shadow: 0 0 20px var(--neon); }
+
+        #upload-form { display: none; background: #111; padding: 20px; border: 1px solid var(--neon); width: 300px; margin: 0 auto 50px; }
+        input { width: 90%; margin-bottom: 10px; background: #000; color: #fff; border: 1px solid #444; padding: 5px; }
+    </style>
+</head>
+<body>
+
+<h1 class="lab-title">M-Link-Laboratory</h1>
+
+<div class="viewport">
+    <div class="track" id="track">
+        </div>
+</div>
+
+<button class="add-btn" id="show-form-btn" onclick="toggleForm()">+ ADD NEW DATA TO REPO</button>
+
+<div id="upload-form">
+    <input type="file" id="fileInput" accept="image/*">
+    <input type="text" id="captionInput" placeholder="ОПИСАНИЕ МОМЕНТА">
+    <button onclick="uploadToGithub()" id="saveBtn">COMMIT TO GITHUB</button>
+</div>
+
+<script>
+    const CONFIG = {
+        token: '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', // Вставь сюда свой токен
+        repo: 'AntonMoryakov/M-Link-Laboratory',
+        branch: 'main'
+    };
+
+    async function loadMemories() {
+        try {
+            const res = await fetch(`https://raw.githubusercontent.com/${CONFIG.repo}/${CONFIG.branch}/memories.json?t=${Date.now()}`);
+            const data = await res.json();
+            const track = document.getElementById('track');
+            track.innerHTML = '';
+            
+            [...data, ...data].forEach(item => {
+                const card = document.createElement('div');
+                card.className = 'card';
+                card.innerHTML = `<img src="${item.url}"><div style="margin-top:10px; font-size:12px">${item.caption}</div>`;
+                track.appendChild(card);
+            });
+        } catch (e) { console.log("Пока воспоминаний нет..."); }
+    }
+
+    async function uploadToGithub() {
+        const fileInput = document.getElementById('fileInput');
+        const caption = document.getElementById('captionInput').value;
+        const btn = document.getElementById('saveBtn');
+        
+        if (!fileInput.files[0]) return alert("Выбери фото!");
+        btn.disabled = true;
+        btn.innerText = "UPLOADING...";
+
+        const file = fileInput.files[0];
+        const fileName = `img/${Date.now()}_${file.name}`;
+        const reader = new FileReader();
+
+        reader.onload = async () => {
+            const content = reader.result.split(',')[1];
+
+            // 1. Загружаем само фото
+            await fetch(`https://api.github.com/repos/${CONFIG.repo}/contents/${fileName}`, {
+                method: 'PUT',
+                headers: { 'Authorization': `token ${CONFIG.token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: `Add photo: ${fileName}`, content, branch: CONFIG.branch })
+            });
+
+            // 2. Обновляем memories.json
+            const jsonRes = await fetch(`https://api.github.com/repos/${CONFIG.repo}/contents/memories.json`, {
+                headers: { 'Authorization': `token ${CONFIG.token}` }
+            });
+            const jsonData = await jsonRes.json();
+            const memories = JSON.parse(atob(jsonData.content));
+            
+            memories.push({
+                url: `https://raw.githubusercontent.com/${CONFIG.repo}/${CONFIG.branch}/${fileName}`,
+                caption: caption,
+                date: new Date().toLocaleDateString()
+            });
+
+            await fetch(`https://api.github.com/repos/${CONFIG.repo}/contents/memories.json`, {
+                method: 'PUT',
+                headers: { 'Authorization': `token ${CONFIG.token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message: "Update memories.json",
+                    content: btoa(JSON.stringify(memories, null, 2)),
+                    sha: jsonData.sha,
+                    branch: CONFIG.branch
+                })
+            });
+
+            alert("Данные закоммичены! Сайт обновится через минуту.");
+            location.reload();
+        };
+        reader.readAsDataURL(file);
+    }
+
+    function toggleForm() {
+        const form = document.getElementById('upload-form');
+        form.style.display = form.style.display === 'block' ? 'none' : 'block';
+    }
+
+    loadMemories();
+</script>
+
+</body>
+</html>
