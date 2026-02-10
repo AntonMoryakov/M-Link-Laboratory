@@ -6,40 +6,118 @@
     <title>M-Link-Laboratory</title>
     <style>
         :root { --neon: #ff2d55; --dark: #050505; }
-        body { background: var(--dark); color: white; font-family: 'Courier New', monospace; margin: 0; overflow-x: hidden; text-align: center; }
-        .lab-title { padding: 40px; color: var(--neon); text-transform: uppercase; letter-spacing: 5px; text-shadow: 0 0 15px var(--neon); }
+        body { 
+            background: var(--dark); 
+            color: white; 
+            font-family: 'Courier New', monospace; 
+            margin: 0; 
+            overflow-x: hidden; 
+            text-align: center; 
+        }
+        .lab-title { 
+            padding: 40px; 
+            color: var(--neon); 
+            text-transform: uppercase; 
+            letter-spacing: 5px; 
+            text-shadow: 0 0 15px var(--neon); 
+        }
         
-        /* Обновленный контейнер для скролла */
+        /* Панель управления скоростью */
+        .controls { 
+            margin: 0 auto 20px; 
+            padding: 12px 20px;
+            background: rgba(255, 45, 85, 0.1);
+            border-radius: 30px;
+            width: fit-content;
+            color: var(--neon);
+            font-size: 11px;
+            letter-spacing: 2px;
+            border: 1px solid rgba(255, 45, 85, 0.2);
+        }
+        #speedRange { 
+            cursor: pointer;
+            width: 150px;
+            margin: 0 15px;
+            vertical-align: middle;
+            accent-color: var(--neon);
+        }
+
+        /* Контейнер для скролла */
         .viewport { 
             width: 100%; 
-            overflow-x: auto; /* Включаем ручной скролл */
+            overflow-x: auto; 
             overflow-y: hidden;
-            padding: 50px 0; 
-            min-height: 450px;
-            scrollbar-width: none; /* Скрываем полосу в Firefox */
-            -webkit-overflow-scrolling: touch; /* Плавность на iPhone */
+            padding: 40px 0; 
+            min-height: 400px;
+            scrollbar-width: none; 
+            -webkit-overflow-scrolling: touch; 
         }
-        .viewport::-webkit-scrollbar { display: none; } /* Скрываем полосу в Chrome/Safari */
+        .viewport::-webkit-scrollbar { display: none; }
 
         .track { 
             display: flex; 
             gap: 20px; 
             width: max-content; 
-            padding: 0 50px; 
+            padding: 0 100px; 
             cursor: grab;
         }
         .track:active { cursor: grabbing; }
 
-        .card { width: 250px; background: #111; border: 1px solid #333; padding: 10px; flex-shrink: 0; pointer-events: none; }
-        .card img { width: 100%; height: 320px; object-fit: cover; border-bottom: 1px solid #222; display: block; }
+        .card { 
+            width: 260px; 
+            background: #111; 
+            border: 1px solid #333; 
+            padding: 10px; 
+            flex-shrink: 0; 
+            pointer-events: none; /* Чтобы картинки не мешали скроллу */
+            user-select: none;
+        }
+        .card img { 
+            width: 100%; 
+            height: 340px; 
+            object-fit: cover; 
+            border-bottom: 1px solid #222; 
+            display: block; 
+        }
         
-        .controls { margin-bottom: 20px; color: #666; font-size: 12px; }
-        #speedRange { accent-color: var(--neon); width: 200px; vertical-align: middle; }
+        .add-btn { 
+            background: none; 
+            border: 1px solid var(--neon); 
+            color: var(--neon); 
+            padding: 15px 30px; 
+            cursor: pointer; 
+            margin: 40px 0; 
+            text-transform: uppercase; 
+            transition: 0.3s;
+        }
+        .add-btn:hover { background: var(--neon); color: white; }
 
-        .add-btn { background: none; border: 1px solid var(--neon); color: var(--neon); padding: 15px 30px; cursor: pointer; margin-bottom: 50px; text-transform: uppercase; }
-        #upload-form { display: none; background: #0a0a0a; padding: 25px; border: 1px solid var(--neon); width: 320px; margin: 0 auto 50px; }
-        input { width: 90%; margin-bottom: 15px; background: #000; color: #fff; border: 1px solid #333; padding: 10px; }
-        .save-btn { background: var(--neon); color: white; border: none; padding: 10px; width: 100%; cursor: pointer; font-weight: bold; }
+        #upload-form { 
+            display: none; 
+            background: #0a0a0a; 
+            padding: 25px; 
+            border: 1px solid var(--neon); 
+            width: 300px; 
+            margin: 0 auto 50px; 
+        }
+        input[type="text"], input[type="file"] { 
+            width: 90%; 
+            margin-bottom: 15px; 
+            background: #000; 
+            color: #fff; 
+            border: 1px solid #333; 
+            padding: 10px; 
+        }
+        .save-btn { 
+            background: var(--neon); 
+            color: white; 
+            border: none; 
+            padding: 12px; 
+            width: 100%; 
+            cursor: pointer; 
+            font-weight: bold; 
+        }
+        .save-btn:disabled { background: #444; }
     </style>
 </head>
 <body>
@@ -47,7 +125,7 @@
 <h1 class="lab-title">M-Link-Laboratory</h1>
 
 <div class="controls">
-    SPEED_CONTROL: <input type="range" id="speedRange" min="0" max="100" value="30">
+    SYNC_SPEED: <input type="range" id="speedRange" min="0" max="100" value="25">
 </div>
 
 <div class="viewport" id="viewport">
@@ -75,23 +153,29 @@
     const b64Encode = (str) => btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (m, p) => String.fromCharCode('0x' + p)));
     const b64Decode = (str) => decodeURIComponent(atob(str).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
 
-    let scrollPos = 0;
+    let scrollLeftFloat = 0;
     let isUserScrolling = false;
-    let autoScrollSpeed = 0.3;
+    let scrollTimeout;
 
-    // Логика автоматической прокрутки
+    // ГЛАВНЫЙ ЦИКЛ ПРОКРУТКИ
     function autoScroll() {
         const viewport = document.getElementById('viewport');
         const speedInput = document.getElementById('speedRange');
         
-        autoScrollSpeed = speedInput.value / 100;
+        // Масштабируем: значение 50 будет давать скорость 0.5px за кадр
+        const speed = parseFloat(speedInput.value) / 100;
 
-        if (!isUserScrolling && autoScrollSpeed > 0) {
-            viewport.scrollLeft += autoScrollSpeed;
-            // Если дошли до конца — в начало (бесконечность)
-            if (viewport.scrollLeft >= (viewport.scrollWidth - viewport.clientWidth - 10)) {
-                viewport.scrollLeft = 1;
+        if (!isUserScrolling && speed > 0) {
+            scrollLeftFloat += speed;
+            viewport.scrollLeft = scrollLeftFloat;
+
+            // Если прокрутили больше 2/3 (так как контент трижды продублирован), прыгаем в центр
+            if (viewport.scrollLeft >= (viewport.scrollWidth / 3 * 2)) {
+                scrollLeftFloat = viewport.scrollWidth / 3;
+                viewport.scrollLeft = scrollLeftFloat;
             }
+        } else if (isUserScrolling) {
+            scrollLeftFloat = viewport.scrollLeft;
         }
         requestAnimationFrame(autoScroll);
     }
@@ -102,9 +186,11 @@
             const res = await fetch(`https://raw.githubusercontent.com/${CONFIG.repo}/${CONFIG.branch}/memories.json?t=${Date.now()}`);
             if (!res.ok) throw new Error("No DB");
             const data = await res.json();
+            if (!data || data.length === 0) throw new Error("Empty DB");
+
             track.innerHTML = '';
             
-            // Дублируем контент для эффекта бесконечности
+            // Тройное дублирование для бесшовного бесконечного скролла
             const displayData = [...data, ...data, ...data]; 
             
             displayData.forEach(item => {
@@ -119,66 +205,96 @@
                 track.appendChild(card);
             });
             
-            autoScroll(); // Запуск прокрутки после загрузки
-        } catch (e) { track.innerHTML = '[ DATABASE_READY_FOR_FIRST_UPLOAD ]'; }
+            // Начинаем с середины, чтобы можно было крутить в обе стороны сразу
+            setTimeout(() => {
+                const viewport = document.getElementById('viewport');
+                scrollLeftFloat = viewport.scrollWidth / 3;
+                viewport.scrollLeft = scrollLeftFloat;
+                autoScroll();
+            }, 100);
+
+        } catch (e) { 
+            track.innerHTML = '<p style="color:#444; padding: 20px;">[ DATABASE_READY_FOR_DATA ]</p>'; 
+        }
     }
 
-    // Обработка ручного вмешательства
+    // ЛОГИКА ПАУЗЫ ПРИ КАСАНИИ
     const v = document.getElementById('viewport');
-    v.addEventListener('touchstart', () => isUserScrolling = true);
-    v.addEventListener('touchend', () => isUserScrolling = false);
-    v.addEventListener('mousedown', () => isUserScrolling = true);
-    window.addEventListener('mouseup', () => isUserScrolling = false);
+    const stopAuto = () => { isUserScrolling = true; clearTimeout(scrollTimeout); };
+    const startAuto = () => {
+        scrollTimeout = setTimeout(() => {
+            scrollLeftFloat = v.scrollLeft;
+            isUserScrolling = false;
+        }, 2000); // Пауза 2 секунды после того, как отпустили ленту
+    };
 
-    // Весь остальной твой код (uploadToGithub, toggleForm) без изменений
+    v.addEventListener('touchstart', stopAuto);
+    v.addEventListener('touchend', startAuto);
+    v.addEventListener('mousedown', stopAuto);
+    window.addEventListener('mouseup', startAuto);
+    v.addEventListener('wheel', () => { stopAuto(); startAuto(); }, {passive: true});
+
     async function uploadToGithub() {
         const fileInput = document.getElementById('fileInput');
         const caption = document.getElementById('captionInput').value;
         const btn = document.getElementById('saveBtn');
         if (!fileInput.files[0]) return alert("Выбери файл");
+        
         btn.disabled = true;
-        btn.innerText = "SENDING...";
+        btn.innerText = "COMMITTING...";
+
         const file = fileInput.files[0];
         const fileName = `img/${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
         const reader = new FileReader();
+
         reader.onload = async () => {
             const content = reader.result.split(',')[1];
             try {
-                await fetch(`https://api.github.com/repos/${CONFIG.repo}/contents/${fileName}`, {
+                // 1. Загрузка картинки
+                const imgRes = await fetch(`https://api.github.com/repos/${CONFIG.repo}/contents/${fileName}`, {
                     method: 'PUT',
                     headers: { 'Authorization': `token ${CONFIG.token}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: "upload img", content })
+                    body: JSON.stringify({ message: "lab_upload", content })
                 });
+                if (!imgRes.ok) throw new Error("Upload Failed");
+
+                // 2. Получение базы данных
                 const jsonRes = await fetch(`https://api.github.com/repos/${CONFIG.repo}/contents/memories.json?ref=${CONFIG.branch}`, {
                     headers: { 'Authorization': `token ${CONFIG.token}` }
                 });
+                
                 let memories = [];
                 let sha = null;
+
                 if (jsonRes.ok) {
                     const jsonData = await jsonRes.json();
                     sha = jsonData.sha;
                     memories = JSON.parse(b64Decode(jsonData.content.replace(/\s/g, '')));
                 }
+
                 memories.push({
                     url: `https://raw.githubusercontent.com/${CONFIG.repo}/${CONFIG.branch}/${fileName}`,
                     caption: caption,
                     date: new Date().toLocaleDateString('ru-RU')
                 });
+
+                // 3. Сохранение базы
                 const finalRes = await fetch(`https://api.github.com/repos/${CONFIG.repo}/contents/memories.json`, {
                     method: 'PUT',
                     headers: { 'Authorization': `token ${CONFIG.token}`, 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        message: "update db",
+                        message: "db_sync",
                         content: b64Encode(JSON.stringify(memories, null, 2)),
                         sha: sha,
                         branch: CONFIG.branch
                     })
                 });
-                if (!finalRes.ok) throw new Error("Final sync failed");
-                alert("SUCCESS");
+
+                if (!finalRes.ok) throw new Error("Sync Failed");
+                alert("SUCCESS: DATA STORED");
                 location.reload();
             } catch (err) {
-                alert("STOP: " + err.message);
+                alert("ERROR: " + err.message);
                 btn.disabled = false;
                 btn.innerText = "RETRY";
             }
